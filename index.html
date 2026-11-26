@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Widget de Clima - Open-Meteo</title>
+  <style>
+    :root {
+      --bg-card: rgba(18, 26, 46, 0.72);
+      --bg-pill: rgba(255, 255, 255, 0.07);
+      --bg-pill-hover: rgba(255, 255, 255, 0.13);
+      --border-glass: rgba(255, 255, 255, 0.14);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-sun: #fbbf24;
+      --accent-glow: rgba(251, 191, 36, 0.28);
+      --accent-sky: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      color: var(--text-main);
+      background:
+        radial-gradient(circle at 18% 20%, rgba(56, 189, 248, 0.25), transparent 42%),
+        radial-gradient(circle at 82% 78%, rgba(251, 191, 36, 0.2), transparent 45%),
+        linear-gradient(155deg, #070b14 0%, #0f172a 55%, #111c33 100%);
+    }
+
+    .weather-widget {
+      position: relative;
+      width: 100%;
+      max-width: 400px;
+      min-height: 360px;
+      padding: 26px;
+      border-radius: 28px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      backdrop-filter: blur(22px) saturate(140%);
+      -webkit-backdrop-filter: blur(22px) saturate(140%);
+      box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      overflow: hidden;
+    }
+
+    .weather-widget::before {
+      content: "";
+      position: absolute;
+      top: -70px;
+      right: -70px;
+      width: 190px;
+      height: 190px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--accent-glow), transparent 70%);
+      pointer-events: none;
+    }
+
+    /* Animación de carga */
+    .loading-box {
+      position: relative;
+      z-index: 2;
+      min-height: 308px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.14);
+      border-top-color: var(--accent-sky);
+      border-right-color: var(--accent-sun);
+      animation: spin 0.85s linear infinite;
+    }
+
+    .loading-text {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      animation: fade-pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes fade-pulse {
+      0%, 100% {
+        opacity: 0.55;
+      }
+      50% {
+        opacity: 1;
+      }
+    }
+
+    /* Contenido del widget */
+    .widget-content {
+      display: none;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+
+    .widget-content.is-visible {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .loading-box.is-hidden {
+      display: none;
+    }
+
+    .widget-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+
+    .location-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .location-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .location-meta {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .api-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent-sky);
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      padding: 5px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .current-weather {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .temp-block {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .temp-value {
+      font-size: 3.75rem;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      background: linear-gradient(180deg, #ffffff 10%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .condition-text {
+      margin-top: 8px;
+      font-size: 1rem;
+      font-weight: 500;
+      color: #e2e8f0;
+    }
+
+    .feels-like {
+      margin-top: 2px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .weather-visual {
+      position: relative;
+      width: 86px;
+      height: 86px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .sun-orb {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #fef08a, var(--accent-sun) 65%, #f59e0b 100%);
+      box-shadow: 0 0 28px var(--accent-sun), 0 0 56px var(--accent-glow);
+      animation: pulse-sun 4.5s ease-in-out infinite;
+    }
+
+    .cloud-puff {
+      position: absolute;
+      bottom: 10px;
+      right: 4px;
+      width: 54px;
+      height: 22px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #f8fafc 0%, #cbd5e1 100%);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.45);
+    }
+
+    .cloud-puff::before {
+      content: "";
+      position: absolute;
+      top: -12px;
+      left: 9px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #f8fafc;
+    }
+
+    .cloud-puff::after {
+      content: "";
+      position: absolute;
+      top: -8px;
+      right: 9px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #e2e8f0;
+    }
+
+    @keyframes pulse-sun {
+      0%, 100% {
+        transform: scale(1);
+        filter: brightness(1);
+      }
+      50% {
+        transform: scale(1.06);
+        filter: brightness(1.1);
+      }
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .metric-card {
+      background: var(--bg-pill);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 12px 10px;
+      text-align: center;
+      transition: background 0.2s ease, transform 0.2s ease;
+    }
+
+    .metric-card:hover {
+      background: var(--bg-pill-hover);
+      transform: translateY(-2px);
+    }
+
+    .metric-label {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .metric-value {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .forecast-section {
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 16px;
+    }
+
+    .forecast-title {
+      font-size: 0.76rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .hourly-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+
+    .hour-slot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 6px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid transparent;
+    }
+
+    .hour-slot.is-now {
+      background: rgba(56, 189, 248, 0.14);
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
+    .hour-time {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .hour-icon {
+      font-size: 1.05rem;
+      line-height: 1;
+    }
+
+    .hour-temp {
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+
+    .widget-footer {
+      margin-top: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .coords {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <article class="weather-widget" aria-label="Widget del clima">
+    <div id="loading-box" class="loading-box">
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="loading-text">Obteniendo datos del clima...</p>
+    </div>
+
+    <div id="widget-content" class="widget-content">
+      <header class="widget-header">
+        <div class="location-group">
+          <h2 id="location-title" class="location-title"></h2>
+          <span id="location-meta" class="location-meta"></span>
+        </div>
+        <span class="api-badge">Open-Meteo</span>
+      </header>
+
+      <section class="current-weather">
+        <div class="temp-block">
+          <span id="temp-value" class="temp-value"></span>
+          <span id="condition-text" class="condition-text"></span>
+          <span id="feels-like" class="feels-like"></span>
+        </div>
+
+        <div class="weather-visual" aria-hidden="true">
+          <div id="icon" class="sun-orb"></div>
+          <div class="cloud-puff"></div>
+        </div>
+      </section>
+
+      <section class="metrics-grid" aria-label="Métricas actuales">
+        <div class="metric-card">
+          <span class="metric-label">Humedad</span>
+          <span id="humidity-value" class="metric-value"></span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Viento</span>
+          <span id="wind-value" class="metric-value"></span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Lluvia</span>
+          <span id="rain-value" class="metric-value"></span>
+        </div>
+      </section>
+
+      <section class="forecast-section" aria-label="Pronóstico por horas">
+        <h3 class="forecast-title">Próximas horas</h3>
+        <div id="hourly-row" class="hourly-row"></div>
+      </section>
+
+      <footer class="widget-footer">
+        <span>Clima del día</span>
+        <span id="coords-text" class="coords"></span>
+      </footer>
+    </div>
+  </article>
+
+  <script src="script.js"></script>
+</body>
+</html>
